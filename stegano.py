@@ -1,3 +1,4 @@
+# Jakub Opólski
 import sys
 import argparse
 import re
@@ -116,34 +117,47 @@ def embed_4(cover, bits):
     font_tags = list(re.finditer(r'<font\b[^>]*>', cover))
     if len(bits) > len(font_tags):
         raise ValueError("nośnik jest za mały do przekazania całej wiadomości")
-    
+
     result = []
     last_pos = 0
+
     for i, m in enumerate(font_tags):
+        result.append(cover[last_pos:m.end()])
+        last_pos = m.end()
+
         if i < len(bits):
+            tag = m.group(0)
             if bits[i]:
-                result.append(cover[last_pos:m.start()])
-                result.append(m.group(0) + m.group(0)[:-1] + ">")
-                last_pos = m.end()
+                result.append(f"</font>{tag}")
             else:
-                result.append(cover[last_pos:m.start()])
-                result.append(m.group(0) + "</font>" + m.group(0))
-                last_pos = m.end()
-        else:
-            result.append(cover[last_pos:m.end()])
-            last_pos = m.end()
-    
+                result.append("</font><font></font>")
+
     result.append(cover[last_pos:])
     return ''.join(result)
 
 def detect_4(watermark):
     bits = []
-    for m in re.finditer(r'(<font[^>]*>)(<font[^>]*>|</font><font[^>]*>)', watermark):
-        if m.group(2).startswith('<font'):
-            bits.append(1)
-        else:
+    pattern = re.compile(r'<font\b[^>]*>(.*?)</font>', re.DOTALL)
+    pos = 0
+
+    while pos < len(watermark):
+        match = pattern.search(watermark, pos)
+        if not match:
+            break
+
+        end = match.end()
+
+        after = watermark[end:end+50]
+        if after.startswith('<font></font>'):
             bits.append(0)
-    
+            pos = end + len('<font></font>')
+        elif re.match(r'<font\b[^>]*>', after):
+            bits.append(1)
+            next_tag = re.match(r'<font\b[^>]*>', after)
+            pos = end + next_tag.end()
+        else:
+            pos = end
+
     return bits
 
 def main():
