@@ -23,12 +23,13 @@ def bits_to_hex(bits):
 
 def clean_cover(cover, method):
     if method == 1:
+        cover = '\n'.join(line.rstrip() for line in cover.splitlines())
         return cover
     elif method == 2:
-        return re.sub(r' {2,}', ' ', cover)
+        cover = re.sub(r' {2,}', ' ', cover)
     elif method == 3:
-        cover = re.sub(r'margin-botom', 'margin-bottom', cover)
-        cover = re.sub(r'lineheight', 'line-height', cover)
+        cover = re.sub(r'lineheight\s*:', 'line-height:', cover)
+        cover = re.sub(r'margin-botom\s*:', 'margin-bottom:', cover)
         return cover
     elif method == 4:
         cover = re.sub(r'(<font[^>]*>)\1', r'\1', cover)
@@ -73,19 +74,27 @@ def detect_2(watermark):
     return bits
 
 def embed_3(cover, bits):
-    p_tags = list(re.finditer(r'<p\b[^>]*>', cover))
+    p_tags = list(re.finditer(r'<p\b[^>]*style\s*=\s*["\'][^"\']*["\'][^>]*>', cover))
     if len(bits) > len(p_tags):
         raise ValueError("nośnik jest za mały do przekazania całej wiadomości")
     
     result = []
     last_pos = 0
     for i, m in enumerate(p_tags):
-        result.append(cover[last_pos:m.end()])
+        tag = m.group(0)
+        result.append(cover[last_pos:m.start()])
+        
         if i < len(bits):
             if bits[i]:
-                result.append('<!-- lineheight -->')
+                modified_tag = tag.replace('style="margin-bottom: 0cm; line-height: 100%"', 'style="margin-bottom: 0cm; lineheight: 100%"')
+                modified_tag = modified_tag.replace('style=\'', 'style=\'lineheight:100%;')
             else:
-                result.append('<!-- margin-botom -->')
+                modified_tag = tag.replace('style="margin-bottom: 0cm; line-height: 100%"', 'style="margin-botom: 0cm; line-height: 100%"')
+                modified_tag = modified_tag.replace('style=\'', 'style=\'margin-botom:0cm;')
+            result.append(modified_tag)
+        else:
+            result.append(tag)
+            
         last_pos = m.end()
     
     result.append(cover[last_pos:])
@@ -93,10 +102,11 @@ def embed_3(cover, bits):
 
 def detect_3(watermark):
     bits = []
-    for comment in re.findall(r'<!-- (.*?) -->', watermark):
-        if 'lineheight' in comment:
+    for m in re.finditer(r'<p\b[^>]*style\s*=\s*["\'][^"\']*["\'][^>]*>', watermark):
+        style = m.group(0)
+        if 'lineheight' in style:
             bits.append(1)
-        elif 'margin-botom' in comment:
+        elif 'margin-botom' in style:
             bits.append(0)
     while bits and bits[-1] == 0:
         bits.pop()
